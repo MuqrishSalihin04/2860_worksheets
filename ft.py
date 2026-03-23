@@ -95,7 +95,7 @@ def handle_client(conn: socket.socket, outdir: str) -> None:
         # TODO: write your code here.
         while len(hdr) < 8 :
             chunk = conn.recv(8-len(hdr))
-            if len(hdr) > 8 : 
+            if not chunk : 
                 raise ConnectionError
             hdr.extend(chunk)
 
@@ -108,6 +108,9 @@ def handle_client(conn: socket.socket, outdir: str) -> None:
                 while remaining > 0:
                     # Receive a chunk (up to BUFSIZE or remaining).
                     # TODO: write your code here.
+                    chunk = conn.recv(min(BUFSIZE, remaining))
+                    if not chunk: 
+                        raise ConnectionError
                     f.write(chunk)
                     remaining -= len(chunk)
                 f.flush()
@@ -122,7 +125,8 @@ def handle_client(conn: socket.socket, outdir: str) -> None:
 
         # Send final LINE_OK to acknowledge successful receipt.
         # TODO: write your code here.
-        conn.recv(LINE_OK)
+       
+        conn.send(LINE_OK)
 
     except Exception:
         # Swallow exceptions to keep server alive; optionally could log
@@ -140,13 +144,13 @@ def run_server(port: int, outdir: str, ipv6: bool) -> None:
     bind_addr = '::' if ipv6 else '0.0.0.0'
     # Create server socket, bind, listen, and accept in an infinite loop.
     # TODO: write your code here.
-    socket = socket.socket(family, socket.SOCK_STREAM)
-    socket.bind(bind_addr, port)
-    socket.listen()
+    sock = socket.socket(family, socket.SOCK_STREAM)
+    sock.bind((bind_addr, port))
+    sock.listen()
 
     while True:
-        conn = socket.accept()
-        handle_client(socket, outdir)
+        conn, addr = sock.accept()
+        handle_client(conn, outdir)
         conn.close()
 
 
@@ -170,29 +174,29 @@ def run_client(server_ip: str, port: int, file_path: str, ipv6: bool) -> int:
     # Send filename, size, and file content (in chunks).
     # Wait for server responses according to protocol.
     # TODO: write your code here.
-    socket = socket.socket(family, socket.SOCK_STREAM)
-    socket.connect(addr)
+    sock = socket.socket(family, socket.SOCK_STREAM)
+    sock.connect(addr)
 
-    socket.send(filename.encode ('utf-8') + b'\n')
-    response = recv_line(socket)
+    sock.send(filename.encode ('utf-8') + b'\n')
+    response = recv_line(sock)
     if response != LINE_OK.rstrip(b'\n'):
-        socket.close()
+        sock.close()
         return 1
     
-    socket.send(struct.pack('!Q',file_size))
+    sock.send(struct.pack('!Q',file_size))
     with open(file_path, 'rb') as file:
         while True:
             chunk = file.read(BUFSIZE)
             if not chunk:
                 break
-            socket.send(chunk)
+            sock.send(chunk)
 
-    final_response = recv_line(socket)
+    final_response = recv_line(sock)
     if final_response != b'OK':
-        socket.close()
+        sock.close()
         return 255
     
-    socket.close() 
+    sock.close() 
     return 0 
 
 
