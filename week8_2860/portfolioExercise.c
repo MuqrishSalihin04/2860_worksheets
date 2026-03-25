@@ -24,6 +24,38 @@
 #include "portfolioExercise_extra.h"        // Contains routines not essential to the assessment.
 
 
+typedef struct {
+    int N;
+    float **M;
+    float *u;
+    float *v;
+    int start_matrix_row;
+    int end_matrix_row;
+    float local_vector_sum;
+} Args; 
+
+void* worker(void *arg){
+    Args *a = (Args*) arg; 
+    for (int row = a->start_matrix_row; row < a-> end_matrix_row; row++ ) {
+        a->v[row] = 0.0f;
+
+        for( int col=0; col<a->N; col++ )
+            a->v[row] += a->M[row][col] * a->u[col];
+    }
+    return NULL; 
+}
+
+void *dot_product_worker(void *arg ) {
+    Args *a = (Args*) arg; 
+    a->local_vector_sum = 0.0f;
+    for( int i=a->start_matrix_row; i<a->end_matrix_row; i++ ) 
+        a->local_vector_sum+= a->v[i]*a->v[i];
+
+    return NULL; 
+}
+
+
+
 //
 // Main.
 //
@@ -54,17 +86,48 @@ int main( int argc, char **argv )
     float dotProduct = 0.0f;        // You should leave the result of your calculation in this variable.
 
     // Step 1. Matrix-vector multiplication Mu = v.
-    for( int row = thread _id; row < N; row +=nThreads)
-        v[row] = 0.0f; 
 
-        for (int col=0, col < N; col ++){
-             v[row] += M[row][col] * u[col];}
-    }        
+    pthread_t threads[nThreads];
+    Args args [nThreads];
+
+    for (int i = 0; i < nThreads; i++) {
+        args[i].N = N;
+        args[i].M = M;
+        args[i].u = u;
+        args[i].v = v; 
+        args[i].start_matrix_row = i*(N/nThreads);
+        args[i].end_matrix_row = (i+1)*(N/nThreads); 
+        pthread_create(&threads[i], NULL, worker, &args[i]);
     
+    }
+        
+    for (int i = 0 ; i <nThreads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+    
+
     // After completing Step 1, you can uncomment the following line to display M, u and v, to check your solution so far.
-     if( N<=12 ) displayProblem( N, M, u, v );
+    if( N<=12 ) displayProblem( N, M, u, v );
 
     // Step 2. The dot product of the vector v with itself.
+
+    for (int i = 0; i < nThreads; i++) {
+        args[i].N = N;
+        args[i].v = v; 
+        args[i].start_matrix_row = i*(N/nThreads);
+        args[i].end_matrix_row = (i+1)*(N/nThreads); 
+        pthread_create(&threads[i], NULL, dot_product_worker, &args[i]);
+    
+    }
+
+    for (int i = 0 ; i <nThreads; i++){
+        pthread_join(threads[i], NULL);
+    }
+        
+    
+    for (int i = 0; i < nThreads; i++) {
+        dotProduct += args[i].local_vector_sum;
+    }
 
 
 
